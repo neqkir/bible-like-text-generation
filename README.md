@@ -17,6 +17,8 @@ Those are the characters the algorithm starts infering new characters from: gene
 
 Loss and accuracy
 
+Training and inference were performed on a 2-socket `EPYC 7F52 16-Cores CPUs` server with two `AMD Instinct MI100 GPUs`. 
+
 <img src="https://user-images.githubusercontent.com/89974426/134898037-2a3461f9-b400-4b0c-8b9b-95dca092d463.png" width=30% height=30%>
 <img src="https://user-images.githubusercontent.com/89974426/134898183-a0450bf6-70ab-47e2-9040-9757a81191ad.png" width=30% height=30%>
 
