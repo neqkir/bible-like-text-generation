@@ -1,7 +1,7 @@
 # Bible-like-text-generation
 Generate Bible-like text using recurrent neural networks
 
-Analyzes only the Old Testament!
+Works only with the Old Testament!
 
 Download Bible's file `t_kjv.csv` on Kaggle https://www.kaggle.com/oswinrh/bible
 This is the King James version https://en.wikipedia.org/wiki/King_James_Version
@@ -14,6 +14,23 @@ next_char = tf.constant(['In'])
 result = [next_char]
 ```
 Those are the characters the algorithm starts infering new characters from: generated text will start with `"In"` and then make up something new, character by character.
+
+Model
+
+An Embedding layer, a GRU layer.
+
+The model operates at the character level. Labels are created from input data shifting the sequence of characters from one character:
+
+```
+# Here's a function that takes a sequence as input, duplicates, and shifts it to align the input and label for each timestep:
+
+def split_input_target(sequence):
+    input_text = sequence[:-1]
+    target_text = sequence[1:]
+    return input_text, target_text
+```
+
+Other models operate at the word or subword levels.
 
 Loss and accuracy
 
