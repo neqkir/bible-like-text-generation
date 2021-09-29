@@ -1,4 +1,4 @@
-# Bible-like-text-generation
+## Bible-like-text-generation
 Generate Bible-like text using recurrent neural networks
 
 Works only with the Old Testament!
@@ -15,11 +15,18 @@ result = [next_char]
 ```
 Those are the characters the algorithm starts infering new characters from: generated text will start with `"In"` and then make up something new, character by character.
 
+
+#### Two models are proposed (1) GRU-based (2) Bidirectional-GRU-based 
+
+#### (1) GRU-based model
+
+In char_gru_bible.py
+
 Model
 
 An Embedding layer, a GRU layer.
 
-The model operates at the character level. Labels are created from input data shifting the sequence of characters from one character:
+The models operate at the character level. Labels are created from input data shifting the sequence of characters from one character:
 
 ```
 # Here's a function that takes a sequence as input, duplicates, and shifts it to align the input and label for each timestep:
@@ -31,7 +38,6 @@ def split_input_target(sequence):
 ```
 
 Other models operate at the word or subword levels.
-
 Loss and accuracy
 
 Training and inference were performed on a 2-socket `EPYC 7F52 16-Cores CPUs` server with two `AMD Instinct MI100 GPUs`. 
@@ -51,3 +57,11 @@ And the whole cursed thing that are of those that were numbered of them were fif
 Thou shalt not were hairy fainty as among he be eaten in thy mout;
 For the LORD thy God redeemed them that
 ```
+
+#### (2) Bidirectional-GRU-based model
+
+In char_bidir_gru_bible.py
+
+Model
+
+An Embedding layer, a Bidirectional GRU layer.
