@@ -1,7 +1,6 @@
 ## TRAIN GRU on Bible data
 ## Generate Bible-like psaums
 
-### -- using model.predict() in generator
 
 import os
 import time
@@ -236,19 +235,31 @@ class OneStep(tf.keras.Model):
     def generate_seq(model, tokenizer, seq_length, seed_text, n_words):
         result = list()
         in_text = seed_text
+        
         # generate a fixed number of words
         for _ in range(n_words):
             # encode the text as integer
-            encoded = tokenizer.texts_to_sequences([in_text])[0]
+            encoded=tokenizer.texts_to_sequences([in_text])[0]
             # truncate sequences to a fixed length
-            encoded = pad_sequences([encoded], maxlen=seq_length, truncating='pre')
+            encoded=pad_sequences([encoded], maxlen=seq_length, truncating='pre')
             # predict probabilities for each word
-            yhat = model.predict(encoded, verbose=0)
+            # Run the model.
+            # predicted_logits.shape is [batch, char, next_char_logits]
+            predicted_logits, states = self.model(inputs=input_words, states=states,
+                                          return_state=True)
+            # Only use the last prediction.
+            predicted_logits = predicted_logits[:, -1, :]
+            predicted_logits = predicted_logits/self.temperature
+
+            # Sample the output logits to generate token IDs.
+            predicted_ids = tf.random.categorical(predicted_logits, num_samples=1)
+            predicted_ids = tf.squeeze(predicted_ids, axis=-1)
+    
             # map predicted word index to word
-            out_word = ''
+            out_word=''
             for word, index in tokenizer.word_index.items():
-                if index == yhat:
-                    out_word = word
+                if index==yhat:
+                    out_word=word
                     break
                 # append to input
                 in_text += ' ' + out_word
