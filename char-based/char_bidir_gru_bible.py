@@ -122,7 +122,7 @@ class MyModel(tf.keras.Model):
     super().__init__(self)
     self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
 
-    gru=tf.keras.layers.GRU(
+    self.gru=tf.keras.layers.GRU(
           rnn_units,
           return_sequences=True,
           return_state=True,
@@ -134,7 +134,7 @@ class MyModel(tf.keras.Model):
         )
 
     self.bidirectional = tf.keras.layers.Bidirectional(  
-        gru,
+        self.gru,
         merge_mode='concat',
         weights=None,
         backward_layer=None
@@ -147,29 +147,29 @@ class MyModel(tf.keras.Model):
     x = self.embedding(x, training=training)
     
     if states is None:
-      gru=tf.keras.layers.GRU(
-          rnn_units,
-          return_sequences=True,
-          return_state=True,
-          reset_after=True,
-          activation='tanh',
-          recurrent_activation='sigmoid',  
-          recurrent_dropout=0.2,
-          dropout=0.2 # to add some dropout to it
-      )
-      fw_states=gru.get_initial_state(x)
-      bw_states=gru.get_initial_state(x)
-      states = fw_states+bw_states
-
+      print("---> states is None")
+      states=self.get_initial_states(x)
+      print("---> initial states are")
+    
     x,fw_states,bw_states=self.bidirectional(x,initial_state=states, training=training)
-    states=fw_states+bw_states
-    x = self.dense(x, training=training)
+    states=[fw_states[0], bw_states[0]]
+    print ("--->self.birirectional states are")
+    print(states)
+    
+    x=self.dense(x, training=training)
 
     if return_state:
       return x, states
     else:
       return x
+    
+  def get_initial_states(self,x):
+    
+    fw_states=self.gru.get_initial_state(x)
+    bw_states=self.gru.get_initial_state(x)
 
+    return [fw_states[0], bw_states[0]]
+    
   @tf.function
   def train_step(self, inputs):
     # unpack the data
@@ -223,16 +223,21 @@ model.compile(optimizer='adam', loss=tf.losses.SparseCategoricalCrossentropy(fro
                   tf.keras.metrics.SparseCategoricalAccuracy()]
               )
 
-# setting early-stopping
+## Setting early-stopping
 EarlyS = EarlyStopping(monitor = 'val_loss', mode = 'min', restore_best_weights=True, patience=10, verbose = 1)
 
-EPOCHS=30
+EPOCHS=20
 ########## FIT
 
 history = model.fit(train_dataset, validation_data=validation_dataset, epochs=EPOCHS, callbacks = [EarlyS], verbose=1)
 
-# generate some data - the generator model
+## Save model
+if not os.path.exists('saved_model'):
+    os.makedirs('saved_model')
+    
+tf.saved_model.save(one_step_model, 'saved_model/words_bible')
 
+## Generate some data - the generator model
 class OneStep(tf.keras.Model):
   def __init__(self, model, chars_from_ids, ids_from_chars, temperature=1.0):
     super().__init__()
@@ -254,38 +259,44 @@ class OneStep(tf.keras.Model):
   @tf.function
   def generate_one_step(self, inputs, states=None):
     # Convert strings to token IDs.
-    input_chars = tf.strings.unicode_split(inputs, 'UTF-8')
-    input_ids = self.ids_from_chars(input_chars).to_tensor()
-
+    input_chars=tf.strings.unicode_split(inputs, 'UTF-8')
+    input_ids=self.ids_from_chars(input_chars).to_tensor()
+    print("---> generator input states are")
+    print(states)
     # Run the model.
     # predicted_logits.shape is [batch, char, next_char_logits]
-    predicted_logits, states = self.model(inputs=input_ids, states=states,
+    predicted_logits, states=self.model(inputs=input_ids, states=states,
                                           return_state=True)
+    print("---> generator after model instanciation states are")
+    print(states) 
     # Only use the last prediction.
-    predicted_logits = predicted_logits[:, -1, :]
-    predicted_logits = predicted_logits/self.temperature
+    predicted_logits=predicted_logits[:,-1,:]
+    predicted_logits=predicted_logits/self.temperature
     # Apply the prediction mask: prevent "[UNK]" from being generated.
-    predicted_logits = predicted_logits + self.prediction_mask
+    predicted_logits=predicted_logits+self.prediction_mask
 
     # Sample the output logits to generate token IDs.
-    predicted_ids = tf.random.categorical(predicted_logits, num_samples=1)
-    predicted_ids = tf.squeeze(predicted_ids, axis=-1)
+    predicted_ids=tf.random.categorical(predicted_logits, num_samples=1)
+    predicted_ids=tf.squeeze(predicted_ids, axis=-1)
 
     # Convert from token ids to characters
-    predicted_chars = self.chars_from_ids(predicted_ids)
+    predicted_chars=self.chars_from_ids(predicted_ids)
 
     # Return the characters and model state.
     return predicted_chars, states
 
-one_step_model = OneStep(model, chars_from_ids, ids_from_chars)
+TEMPERATURE=.8
 
-start = time.time()
-states = None
-next_char = tf.constant(['In'])
-result = [next_char]
+one_step_model = OneStep(model, chars_from_ids, ids_from_chars, temperature=TEMPERATURE)
+
+start=time.time()
+states=None
+next_char=tf.constant(['In'])
+result=[next_char]
 
 for n in range(1000):
-  next_char, states = one_step_model.generate_one_step(next_char, states=states)
+  print("---> generator loop idx is")
+  next_char,states=one_step_model.generate_one_step(next_char, states=states)
   result.append(next_char)
 
 result = tf.strings.join(result)
