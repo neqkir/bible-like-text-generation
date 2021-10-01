@@ -226,7 +226,7 @@ model.compile(optimizer='adam', loss=tf.losses.SparseCategoricalCrossentropy(fro
 ## Setting early-stopping
 EarlyS = EarlyStopping(monitor = 'val_loss', mode = 'min', restore_best_weights=True, patience=10, verbose = 1)
 
-EPOCHS=20
+EPOCHS=8
 ########## FIT
 
 history = model.fit(train_dataset, validation_data=validation_dataset, epochs=EPOCHS, callbacks = [EarlyS], verbose=1)
@@ -235,7 +235,9 @@ history = model.fit(train_dataset, validation_data=validation_dataset, epochs=EP
 if not os.path.exists('saved_model'):
     os.makedirs('saved_model')
     
-tf.saved_model.save(one_step_model, 'saved_model/words_bible')
+model.save_weights('./saved_model/words_bible')
+
+#model.load_weights('./saved_model/words_bible')
 
 ## Generate some data - the generator model
 class OneStep(tf.keras.Model):
