@@ -10,6 +10,7 @@ import operator
 import keras.backend as K
 
 import tensorflow as tf
+
 from tensorflow.keras.layers.experimental import preprocessing
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Embedding
@@ -158,7 +159,7 @@ class MyModel(tf.keras.Model):
                                    recurrent_dropout=0.2,
                                    dropout=0.2 # to add some dropout to it
                                    )
-    self.dense = tf.keras.layers.Dense(vocab_size)
+    self.dense = tf.keras.layers.Dense(vocab_size, activation='softmax')
 
   def call(self, inputs, states=None, return_state=False, training=False):
     x = inputs
@@ -200,12 +201,12 @@ model = MyModel(
     rnn_units=RNN_UNITS
     )
 
-loss = tf.losses.SparseCategoricalCrossentropy(from_logits=True)
+#loss = tf.losses.SparseCategoricalCrossentropy(from_logits=True) ## we changed to a softmax --> from_logits=False
+loss = tf.losses.SparseCategoricalCrossentropy(from_logits=False)
 
-model.compile(optimizer='adam', loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
+model.compile(optimizer='adam', loss=loss,
               metrics=[
-                  tf.keras.metrics.SparseCategoricalAccuracy()]
-              )
+                  tf.keras.metrics.SparseCategoricalAccuracy()])
 
 # Setting early-stopping
 EarlyS = EarlyStopping(monitor = 'val_loss', mode = 'min', restore_best_weights=True, patience=10, verbose = 1)
@@ -213,89 +214,11 @@ EarlyS = EarlyStopping(monitor = 'val_loss', mode = 'min', restore_best_weights=
 #####
 #### FIT
 #####
-EPOCHS=1
+EPOCHS=20
 
 history = model.fit(train_dataset, validation_data=validation_dataset, epochs=EPOCHS, callbacks = [EarlyS], verbose=1)
 
 model.summary()
-
-#####
-#### GENERATOR
-#####
-
-NB_WORDS_TO_PREDICT=1000
-
-class OneStep(tf.keras.Model):
-    def __init__(self, model, temperature=1.0):
-        super().__init__()
-        self.temperature = temperature
-        self.model = model
-
-    @tf.function
-    # generate a sequence from a language model
-    def generate_seq(self,tokenizer, seq_length, seed_text, n_words):
-        
-        result = list()
-        in_text = seed_text
-        states=None
-
-        print ( in_text )
-        
-        # generate a fixed number of words
-        for _ in range(n_words):
-            
-            # encode the text as integer
-            encoded=tokenizer.texts_to_sequences([in_text])[0]
-            # truncate sequences to a fixed length
-            encoded=pad_sequences([encoded], maxlen=seq_length,padding='post')
-
-           # encoded_ds=tf.data.Dataset.from_tensor_slices(np.array(encoded))
-            
-            # Predict probabilities for each word
-            # Run the model.
-            # predicted_logits.shape is [batch, char, next_char_logits]
-            predicted_logits,states=self.model(inputs=encoded, states=states,
-                                          return_state=True)
-
-            # Only use the last prediction.
-            predicted_logits=predicted_logits[:, -1, :]
-            predicted_logits=predicted_logits/self.temperature
-
-            # Sample the output logits to generate token IDs.
-            predicted_ids=tf.random.categorical(predicted_logits, num_samples=1)
-            predicted_ids=tf.squeeze(predicted_ids, axis=-1)
-            
-            # Map predicted word index to word
-            out_word=''
-            
-            for word, index in tokenizer.word_index.items():
-
-                if tf.math.equal(tf.constant(index,dtype=tf.int64),predicted_ids) is not None:
-                    out_word=word
-                    break
-
-            # Append to input
-            in_text+=' ' + out_word
-            result.append(out_word)
-
-        return ' '.join(result)
-
-one_step_model = OneStep(model)
-
-# Select a seed text
-seed_text=bible_text[np.random.randint(0,len(bible_text))]
-print(seed_text + '\n')
- 
-# Generate new text
-start = time.time()
-
-generated = one_step_model.generate_seq(tokenizer, seq_length, seed_text, NB_WORDS_TO_PREDICT)
-print('\nRun time:', end - start)
-print(generated)
-
-with open('out_word_bible.txt','a') as f:
-  f.write(generated + '\n\n' + '_'*80)
-  f.write('\nRun time:%f'  %(end - start))
 
 ######
 #### SAVE
@@ -304,7 +227,139 @@ with open('out_word_bible.txt','a') as f:
 if not os.path.exists('saved_model'):
     os.makedirs('saved_model')
     
-tf.saved_model.save(one_step_model, 'saved_model/one_step_gen_words')
+tf.saved_model.save(model, 'saved_model/model_words')
+
+#####
+#### GENERATOR
+#####
+
+NB_WORDS_TO_PREDICT=50
+
+# generate a sequence from a language model
+def generate_seq(model, tokenizer, seq_length, seed_text, n_words):
+    result = list()
+    in_text = seed_text
+    # generate a fixed number of words
+    for _ in range(n_words):
+
+            # encode the text as integer
+            encoded = tokenizer.texts_to_sequences([in_text])[0]
+            # truncate sequences to a fixed length
+            encoded = pad_sequences([encoded], maxlen=seq_length,truncating='pre')
+
+            pred=model.predict(encoded)
+
+            # predict probabilities for each word
+            yhat=np.argmax(pred, axis=-1)
+
+            # map predicted word index to word
+            out_word = ''
+            yhat=yhat[0][0]
+
+            for word, index in tokenizer.word_index.items():
+                if index == yhat:
+                    out_word = word
+                    break
+            
+            # append to input
+            in_text += ' ' + out_word
+            result.append(out_word)
+    return ' '.join(result)
+
+
+##class OneStep(tf.keras.Model):
+##    def __init__(self, model, temperature=1.0):
+##        super().__init__()
+##        self.temperature = temperature
+##        self.model = model
+##
+##    @tf.function
+##    # generate a sequence from a language model
+##    def generate_seq(self,tokenizer, seq_length, seed_text, n_words):
+##        
+##        result = list()
+##        in_text = seed_text
+##        states=None
+##        
+##        # generate a fixed number of words
+##        for _ in range(n_words):
+##            
+##            # encode the text as integer
+##            encoded=tokenizer.texts_to_sequences([in_text])[0]
+##            # truncate sequences to a fixed length
+##            encoded=pad_sequences([encoded], maxlen=seq_length,padding='post')
+##
+##            # encoded_ds=tf.data.Dataset.from_tensor_slices(np.array(encoded))
+##            
+##            # Predict probabilities for each word
+##            # Run the model.
+##            # predicted_logits.shape is [batch, char, next_char_logits]
+##            predicted_logits,states=self.model(inputs=encoded, states=states,
+##                                          return_state=True)
+##
+##            # Only use the last prediction.
+##            predicted_logits=predicted_logits[:, -1, :]
+##            predicted_logits=predicted_logits/self.temperature
+##
+##            # Sample the output logits to generate token IDs.
+##            predicted_ids=tf.random.categorical(predicted_logits, num_samples=1)
+##            predicted_ids=tf.squeeze(predicted_ids, axis=1)
+##
+##            #idx=predicted_ids.numpy()[0]
+##
+##            #print("idx")
+##            #print(idx)
+##
+##            out_word=tf.keras.layers.experimental.preprocessing.StringLookup(
+##                vocabulary=tokenizer.word_index,
+##                mask_token='',
+##                invert=True)
+##            
+##            # Map predicted word index to word
+##            #out_word=tokenizer.word_index[idx]
+##
+####            def update_x_2(w):
+####                with tf.control_dependencies([tf.assign(out_word, [w])]):
+####                    return tf.identity(out_word)
+####
+####            for word, index in tokenizer.word_index.items():
+####                
+####                tf.cond(tf.math.equal(tf.constant(index,dtype=tf.int64),predicted_ids),
+####                        tf_assign_word)
+##                                
+##            # Append to input
+##            in_text+=' '+out_word
+##            result.append(out_word)
+##
+##        return ' '.join(result) 
+##
+##
+##one_step_model = OneStep(model)
+
+# Select a seed text
+seed_text=bible_text[np.random.randint(0,len(bible_text))]
+print(seed_text + '\n')
+ 
+# Generate new text
+start = time.time()
+
+generated = generate_seq(model, tokenizer, seq_length, seed_text, 50)
+print(generated)
+
+#####
+#### OUT
+#####
+
+##generated= one_step_model.generate_seq(tokenizer, seq_length, seed_text, NB_WORDS_TO_PREDICT)
+##str_generated=generated.numpy().decode("utf-8")
+end = time.time()
+print('\nRun time:', end - start)
+print(generated)
+
+with open('out_word_bible.txt','a') as f:
+  f.write(generated + '\n\n' + '_'*80)
+  f.write('\nRun time:%f'  %(end - start))
+
 
 #####
 #### METRICS
