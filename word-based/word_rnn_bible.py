@@ -122,11 +122,13 @@ dataset= tf.data.Dataset.from_tensor_slices((input_sequences, target_sequences))
 #### Model
 #####
 
-BATCH_SIZE=64
+BATCH_SIZE=512
 BUFFER_SIZE=10000
 VAL_FRAC=0.2  
 EMBEDDING_DIM=256
 RNN_UNITS=1024
+DENSE_UNITS=128
+TEMP=0.02
 
 len_val=int(num_verses*VAL_FRAC)
 
@@ -147,19 +149,21 @@ train_dataset = (
     .prefetch(tf.data.experimental.AUTOTUNE))
 
 class MyModel(tf.keras.Model):
-  def __init__(self, vocab_size, embedding_dim, rnn_units):
+
+  def __init__(self, vocab_size, embedding_dim, rnn_units,temperature):
     super().__init__(self)
     self.embedding = tf.keras.layers.Embedding(vocab_size, EMBEDDING_DIM)
     self.gru = tf.keras.layers.GRU(RNN_UNITS,
                                    return_sequences=True,
                                    return_state=True,
                                    reset_after=True,
-                                   activation='tanh',
-                                   recurrent_activation='sigmoid', # to make it more GPU friendly
-                                   recurrent_dropout=0.2,
-                                   dropout=0.2 # to add some dropout to it
+                                   recurrent_dropout=0.6,
+                                   dropout=0.6 # to add some dropout to it
                                    )
-    self.dense = tf.keras.layers.Dense(vocab_size, activation='softmax')
+    self.dense_1=tf.keras.layers.Dense(DENSE_UNITS, activation='relu')
+    self.dense_2=tf.keras.layers.Dense(vocab_size)
+    self.func_temp=tf.keras.layers.Lambda(lambda x: x / temperature)
+    self.softmax=tf.keras.layers.Softmax()
 
   def call(self, inputs, states=None, return_state=False, training=False):
     x = inputs
@@ -167,7 +171,10 @@ class MyModel(tf.keras.Model):
     if states is None:
       states = self.gru.get_initial_state(x)
     x, states = self.gru(x, initial_state=states, training=training)
-    x = self.dense(x, training=training)
+    x = self.dense_1(x, training=training)
+    x=self.dense_2(x,training=training)
+    x=self.func_temp(x)
+    x=self.softmax(x)
     
     if return_state:
       return x, states
@@ -198,7 +205,8 @@ class MyModel(tf.keras.Model):
 model = MyModel(
     vocab_size=vocab_size,
     embedding_dim=EMBEDDING_DIM,
-    rnn_units=RNN_UNITS
+    rnn_units=RNN_UNITS,
+    temperature=TEMP
     )
 
 #loss = tf.losses.SparseCategoricalCrossentropy(from_logits=True) ## we changed to a softmax --> from_logits=False
@@ -211,14 +219,18 @@ model.compile(optimizer='adam', loss=loss,
 # Setting early-stopping
 EarlyS = EarlyStopping(monitor = 'val_loss', mode = 'min', restore_best_weights=True, patience=10, verbose = 1)
 
+
+
 #####
 #### FIT
 #####
-EPOCHS=20
+EPOCHS=30
 
 history = model.fit(train_dataset, validation_data=validation_dataset, epochs=EPOCHS, callbacks = [EarlyS], verbose=1)
 
 model.summary()
+
+
 
 ######
 #### SAVE
@@ -229,16 +241,20 @@ if not os.path.exists('saved_model'):
     
 tf.saved_model.save(model, 'saved_model/model_words')
 
+
+
 #####
 #### GENERATOR
 #####
 
 NB_WORDS_TO_PREDICT=50
 
+
 # generate a sequence from a language model
 def generate_seq(model, tokenizer, seq_length, seed_text, n_words):
     result = list()
     in_text = seed_text
+    
     # generate a fixed number of words
     for _ in range(n_words):
 
@@ -264,6 +280,7 @@ def generate_seq(model, tokenizer, seq_length, seed_text, n_words):
             # append to input
             in_text += ' ' + out_word
             result.append(out_word)
+            
     return ' '.join(result)
 
 # Select a seed text
@@ -274,21 +291,27 @@ print(seed_text + '\n')
 start = time.time()
 
 generated = generate_seq(model, tokenizer, seq_length, seed_text, 50)
-print(generated)
+
+
 
 #####
 #### OUT
 #####
 
+end = time.time()
+
+print(seed_text + generated)
+
 ##generated= one_step_model.generate_seq(tokenizer, seq_length, seed_text, NB_WORDS_TO_PREDICT)
 ##str_generated=generated.numpy().decode("utf-8")
 end = time.time()
 print('\nRun time:', end - start)
-print(generated)
 
 with open('out_word_bible.txt','a') as f:
   f.write(generated + '\n\n' + '_'*80)
   f.write('\nRun time:%f'  %(end - start))
+
+
 
 
 #####
