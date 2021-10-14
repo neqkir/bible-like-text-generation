@@ -22,3 +22,4 @@ This is the King James version https://en.wikipedia.org/wiki/King_James_Version
 
 * pick a place randomly in the bible and generate next words from there
 
+see https://github.com/vlraik/word-level-rnn-keras/blob/master/lstm_text_generation.py itself inspired from the char-based algorithm https://github.com/fchollet/keras/blob/master/examples/lstm_text_generation.py
