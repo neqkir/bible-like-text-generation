@@ -18,5 +18,7 @@ This is the King James version https://en.wikipedia.org/wiki/King_James_Version
 
 * screening the text with a sliding window of size 30 words, stride 3 words
 
-* for each sentence of input data, labels are the next word
+* for each sentence of input data, label is the next word
+
+* pick a place randomly in the bible and generate next words from there
 
