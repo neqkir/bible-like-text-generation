@@ -1,5 +1,8 @@
 from __future__ import print_function
 
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Dropout
 from keras.layers.recurrent import LSTM
@@ -8,12 +11,13 @@ from keras.utils.data_utils import get_file
 import numpy as np
 import random
 import sys
-import os
 
 path = "t_kjv.txt"
 
+  
 try: 
-    text = open(path).read().lower()
+    with open(path, 'rb') as f:
+        text = f.read()
 except UnicodeDecodeError:
     import codecs
     text = codecs.open(path, encoding='utf-8').read().lower()
@@ -21,7 +25,7 @@ except UnicodeDecodeError:
 print('corpus length:', len(text))
 
 chars = set(text)
-words = set(open(path).read().lower().split())
+words = set(open(path,"r",errors='ignore',encoding='utf-8').read().lower().split())
 
 print("chars:",type(chars))
 print("words",type(words))
@@ -46,7 +50,9 @@ list_words = []
 
 sentences2=[]
 list_words=text.lower().split()
+list_words=[str(a,'UTF-8') for a in list_words if a.isalpha()]
 
+print(list_words[:200])
 
 for i in range(0,len(list_words)-maxlen, step):
     sentences2 = ' '.join(list_words[i: i + maxlen])
@@ -59,6 +65,7 @@ print('Vectorization...')
 X = np.zeros((len(sentences), maxlen, len(words)), dtype=np.bool)
 y = np.zeros((len(sentences), len(words)), dtype=np.bool)
 for i, sentence in enumerate(sentences):
+    print (sentence)
     for t, word in enumerate(sentence.split()):
         #print(i,t,word)
         X[i, t, word_indices[word]] = 1
@@ -78,6 +85,8 @@ model.add(Activation('softmax'))
 
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
+model.summary()
+
 if os.path.isfile('GoTweights'):
     model.load_weights('GoTweights')
 
@@ -92,7 +101,7 @@ for iteration in range(1, 300):
     print()
     print('-' * 50)
     print('Iteration', iteration)
-    model.fit(X, y, batch_size=128, nb_epoch=2)
+    model.fit(X, y, batch_size=128, epochs = 42)
     model.save_weights('GoTweights',overwrite=True)
 
     start_index = random.randint(0, len(list_words) - maxlen - 1)
@@ -123,4 +132,5 @@ for iteration in range(1, 300):
             sys.stdout.write(next_word)
             sys.stdout.flush()
         print()
+        
 #model.save_weights('weights') 
