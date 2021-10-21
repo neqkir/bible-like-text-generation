@@ -1,89 +1,183 @@
+## TRAIN GRU on Bible data
+## Generate Bible-like psaums
+
+## ---> sequential model with data preparation using Tokenizer
 from __future__ import print_function
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
-from keras.models import Sequential
-from keras.layers.core import Dense, Activation, Dropout
-from keras.layers.recurrent import LSTM
-from keras.utils.data_utils import get_file
+from tensorflow.python.client import device_lib
+print ( device_lib.list_local_devices() )
 
-import numpy as np
 import random
 import sys
 
-path = "t_kjv.txt"
+import time
+import numpy as np
+import csv
+import operator
 
-  
-try: 
-    with open(path, 'rb') as f:
-        text = f.read()
-except UnicodeDecodeError:
-    import codecs
-    text = codecs.open(path, encoding='utf-8').read().lower()
+import tensorflow as tf
 
-print('corpus length:', len(text))
+from tensorflow.keras.layers.experimental import preprocessing
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM, Embedding
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-chars = set(text)
-words = set(open(path,"r",errors='ignore',encoding='utf-8').read().lower().split())
+#####
+#### Data
+#####
 
-print("chars:",type(chars))
-print("words",type(words))
-print("total number of unique words",len(words))
-print("total number of unique chars", len(chars))
+#Load doc into memory
+bible="t_kjv.csv"
+def load_doc(filename):
+    text=[]
+    with open(filename) as f:
+        reader = csv.reader(f)
+        next(reader)
+        for line in reader:
+            if(int(line[1])<=39): # Only old testament
+                text.append(line[4])
+    return text
 
+##Load bible text into a list of verses
+bible_text=load_doc(bible)
 
-word_indices = dict((c, i) for i, c in enumerate(words))
-indices_word = dict((i, c) for i, c in enumerate(words))
+##-->['In the beginning God created the heaven and the earth.',
+## 'And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of God moved upon the face of the waters.',
+## 'And God said, Let there be light: and there was light.', 'And God saw the light, that it was good: and God divided the light from the darkness.',
+## 'And God called the light Day, and the darkness he called Night. And the evening and the morning were the first day.',
+## 'And God said, Let there be a firmament in the midst of the waters, and let it divide the waters from the waters.', ...]
 
-print("word_indices", type(word_indices), "length:",len(word_indices) )
-print("indices_words", type(indices_word), "length", len(indices_word))
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(bible_text)#Builds the word index
+sequences = tokenizer.texts_to_sequences(bible_text)
 
-maxlen = 30
-step = 3
-print("maxlen:",maxlen,"step:", step)
-sentences = []
-next_words = []
-next_words= []
-sentences1 = []
-list_words = []
+##-->[[5, 1, 914, 32, 1352, 1, 214, 2, 1, 111],
+## [2, 1, 111, 31, 252, 2091, 2, 1874, 2, 547, 31, 38, 1, 196, 3, 1, 899, 2, 1, 298, 3, 32, 878, 38, 1, 196, 3, 1, 266],
+## [2, 32, 33, 79, 54, 16, 369, 2, 54, 31, 369], [2, 32, 215, 1, 369, 6, 17, 31, 156, 2, 32, 955, 1, 369, 34, 1, 547], ...]
 
-sentences2=[]
-list_words=text.lower().split()
-list_words=[str(a,'UTF-8') for a in list_words if a.isalpha()]
+sequences=pad_sequences(sequences, padding='post')
 
-print(list_words[:200])
+##-->[[   5    1  914   32 1352    1  214    2    1  111    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0]
+## [   2    1  111   31  252 2091    2 1874    2  547   31   38    1  196
+##     3    1  899    2    1  298    3   32  878   38    1  196    3    1
+##   266    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0]
+##...]
 
-for i in range(0,len(list_words)-maxlen, step):
-    sentences2 = ' '.join(list_words[i: i + maxlen])
-    sentences.append(sentences2)
-    next_words.append((list_words[i + maxlen]))
-print('nb sequences(length of sentences):', len(sentences))
-print("length of next_word",len(next_words))
+word_index=tokenizer.word_index 
 
-print('Vectorization...')
-X = np.zeros((len(sentences), maxlen, len(words)), dtype=np.bool)
-y = np.zeros((len(sentences), len(words)), dtype=np.bool)
-for i, sentence in enumerate(sentences):
-    print (sentence)
-    for t, word in enumerate(sentence.split()):
-        #print(i,t,word)
-        X[i, t, word_indices[word]] = 1
-    y[i, word_indices[next_words[i]]] = 1
+##for k,v in sorted(word_index.items(), key=operator.itemgetter(1))[:10]:
+##   print (k,v)
 
+##--> the 1
+##and 2
+##of 3
+##to 4
+##in 5
+##that 6
+##shall 7
+##he 8
+##lord 9
+##his 10
+##
+##[...]
+
+vocab_size = len(tokenizer.word_index) + 1
+
+## Split bible data into inputs and labels. Labels are inputs shifted by one word.
+input_sequences, target_sequences = sequences[:,:-1], sequences[:,1:]
+
+print (input_sequences[:2])
+print (target_sequences[:2])
+
+## --> target_sequences
+## [[   1  914   32 1352    1  214    2    1  111    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0]
+## [   1  111   31  252 2091    2 1874    2  547   31   38    1  196    3
+##     1  899    2    1  298    3   32  878   38    1  196    3    1  266
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0    0    0    0    0    0    0    0    0    0
+##     0    0    0    0    0]
+## ... ]
+
+seq_length=input_sequences.shape[1] ##-->89
+num_verses=input_sequences.shape[0]
+
+input_sequences=np.array(input_sequences)
+target_sequences=np.array(target_sequences)
+
+dataset= tf.data.Dataset.from_tensor_slices((input_sequences, target_sequences))
+print ( len( list(dataset.as_numpy_iterator()) ) )
+
+#####
+#### Model
+#####
+
+EPOCHS=2
+BATCH_SIZE=128
+VAL_FRAC=0.2  
+LSTM_UNITS=1024
+DENSE_UNITS=vocab_size
+EMBEDDING_DIM=256
+BUFFER_SIZE=10000
+
+len_val=int(num_verses*VAL_FRAC)
+
+#build validation dataset
+validation_dataset = dataset.take(len_val)
+validation_dataset = (
+    validation_dataset
+    .shuffle(BUFFER_SIZE)
+    .padded_batch(BATCH_SIZE, drop_remainder=True)
+    .prefetch(tf.data.experimental.AUTOTUNE))
+
+#build training dataset
+train_dataset = dataset.skip(len_val)
+train_dataset = (
+    train_dataset
+    .shuffle(BUFFER_SIZE)
+    .padded_batch(BATCH_SIZE, drop_remainder=True)
+    .prefetch(tf.data.experimental.AUTOTUNE)
+    )
 
 #build the model: 2 stacked LSTM
 print('Build model...')
-model = Sequential()
-model.add(LSTM(512, return_sequences=True, input_shape=(maxlen, len(words))))
-model.add(Dropout(0.2))
-model.add(LSTM(512, return_sequences=False))
-model.add(Dropout(0.2))
-model.add(Dense(len(words)))
-#model.add(Dense(1000))
-model.add(Activation('softmax'))
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.Embedding(vocab_size, EMBEDDING_DIM))
+model.add(tf.keras.layers.LSTM(LSTM_UNITS, return_sequences=True))
+model.add(tf.keras.layers.Dropout(0.2))
+model.add(tf.keras.layers.LSTM(512, return_sequences=True))
+model.add(tf.keras.layers.Dropout(0.2))
+model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(DENSE_UNITS, activation='softmax')))
 
-model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+loss=tf.losses.SparseCategoricalCrossentropy(from_logits=False)
+
+model.compile(optimizer='adam',
+              loss=loss,
+              metrics=[
+                  tf.keras.metrics.SparseCategoricalAccuracy()
+                  ]
+              )
 
 model.summary()
 
@@ -91,46 +185,68 @@ if os.path.isfile('GoTweights'):
     model.load_weights('GoTweights')
 
 def sample(a, temperature=1.0):
-    # helper function to sample an index from a probability array
+    #helper function to sample an index from a probability array
     a = np.log(a) / temperature
     a = np.exp(a) / np.sum(np.exp(a))
     return np.argmax(np.random.multinomial(1, a, 1))
 
-# train the model, output generated text after each iteration
-for iteration in range(1, 300):
+#train the model, output generated text after each iteration
+for iteration in range(1, 30):
+
     print()
     print('-' * 50)
     print('Iteration', iteration)
-    model.fit(X, y, batch_size=128, epochs = 42)
+
+    model.fit(train_dataset, validation_data=validation_dataset, batch_size=BATCH_SIZE, epochs=EPOCHS)
+
     model.save_weights('GoTweights',overwrite=True)
 
-    start_index = random.randint(0, len(list_words) - maxlen - 1)
+    seed_index = random.randint(0, num_verses)
+    generated = ''
+    sentence=bible_text[seed_index]
+    generated+=sentence
+    print('----- Generating with seed: "' , sentence , '"')
+    print()
+
+    sys.stdout.write(generated)
+
+    print()
+
+    x=tokenizer.texts_to_sequences(generated) # encode the sentence
+    x=pad_sequences(x, padding='post')
+    x=np.array(x)
+
+    print ( "encoding for x" )
+    print ( x )
 
     for diversity in [0.2, 0.5, 1.0, 1.2]:
+
         print()
         print('----- diversity:', diversity)
-        generated = ''
-        sentence = list_words[start_index: start_index + maxlen]
-        generated += ' '.join(sentence)
-        print('----- Generating with seed: "' , sentence , '"')
-        print()
-        sys.stdout.write(generated)
-        print()
 
         for i in range(1024):
-            x = np.zeros((1, maxlen, len(words)))
-            for t, word in enumerate(sentence):
-                x[0, t, word_indices[word]] = 1.
+            
+            preds = model.predict(x, verbose=0)[0][0]
+            print ("preds")
+            print (preds)
+            #print ( np.sum(preds) )
+            
+            #next_index = sample(preds, diversity)
+            next_index=np.argmax( preds )
+            print ( next_index )
+            next_word,idx = sorted(word_index.items(), key=operator.itemgetter(1))[next_index]
+            #next_word = word_index[next_index]
 
-            preds = model.predict(x, verbose=0)[0]
-            next_index = sample(preds, diversity)
-            next_word = indices_word[next_index]
-            generated += next_word
-            del sentence[0]
-            sentence.append(next_word)
+            generated+=' '
+            generated+=next_word
+
+            sentence+=' '
+            sentence+=next_word
+                
             sys.stdout.write(' ')
             sys.stdout.write(next_word)
             sys.stdout.flush()
+
         print()
         
 #model.save_weights('weights') 
