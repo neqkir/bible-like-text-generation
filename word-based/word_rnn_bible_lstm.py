@@ -133,7 +133,7 @@ print ( len( list(dataset.as_numpy_iterator()) ) )
 #### Model
 #####
 
-EPOCHS=2
+EPOCHS=200
 BATCH_SIZE=128
 VAL_FRAC=0.2  
 LSTM_UNITS=1024
@@ -191,7 +191,7 @@ def sample(a, temperature=1.0):
     return np.argmax(np.random.multinomial(1, a, 1))
 
 #train the model, output generated text after each iteration
-for iteration in range(1, 30):
+for iteration in range(1, 300):
 
     print()
     print('-' * 50)
@@ -202,51 +202,47 @@ for iteration in range(1, 30):
     model.save_weights('GoTweights',overwrite=True)
 
     seed_index = random.randint(0, num_verses)
+
     generated = ''
+
     sentence=bible_text[seed_index]
+
     generated+=sentence
+    
     print('----- Generating with seed: "' , sentence , '"')
-    print()
-
-    sys.stdout.write(generated)
-
-    print()
-
-    x=tokenizer.texts_to_sequences(generated) # encode the sentence
-    x=pad_sequences(x, padding='post')
-    x=np.array(x)
-
-    print ( "encoding for x" )
-    print ( x )
 
     for diversity in [0.2, 0.5, 1.0, 1.2]:
 
+        with open('out_bible.txt','a') as f:
+            f.write(str( diversity ) + '\n\n' + '_'*80)
         print()
         print('----- diversity:', diversity)
 
-        for i in range(1024):
-            
+        for i in range(100):
+
+            x=tokenizer.texts_to_sequences(generated) # encode the sentence
+            x=pad_sequences(x, padding='post')
+            x=np.array(x)
+    
             preds = model.predict(x, verbose=0)[0][0]
-            print ("preds")
-            print (preds)
-            #print ( np.sum(preds) )
-            
+         
             #next_index = sample(preds, diversity)
             next_index=np.argmax( preds )
-            print ( next_index )
+
             next_word,idx = sorted(word_index.items(), key=operator.itemgetter(1))[next_index]
             #next_word = word_index[next_index]
 
             generated+=' '
             generated+=next_word
 
-            sentence+=' '
-            sentence+=next_word
-                
-            sys.stdout.write(' ')
-            sys.stdout.write(next_word)
-            sys.stdout.flush()
-
+            print (next_word)
+            print (' ')
+            
         print()
         
+    print('----- Generated text: "' , generated , '"')
+    
+    with open('out_bible.txt','a') as f:
+        f.write(generated + '\n\n' + '_'*80)
+  
 #model.save_weights('weights') 
