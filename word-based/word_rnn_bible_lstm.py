@@ -133,8 +133,8 @@ print ( len( list(dataset.as_numpy_iterator()) ) )
 #### Model
 #####
 
-EPOCHS=30
-BATCH_SIZE=128
+EPOCHS=300
+BATCH_SIZE=256
 VAL_FRAC=0.2  
 LSTM_UNITS=1024
 DENSE_UNITS=vocab_size
@@ -191,14 +191,14 @@ def sample(a, temperature=1.0):
     return np.argmax(np.random.multinomial(1, a, 1))
 
 #train the model, output generated text after each iteration
-for iteration in range(1, 6):
+for iteration in range(1, 143):
 
     print()
     print('-' * 50)
     print('Iteration', iteration)
 
     with open('out_bible.txt','a') as f:
-        f.write('Iteration' + str( iteration ) + '\n\n' + '_'*80)
+        f.write('_'*80+'\n' + 'Iteration' + str( iteration ) )
         
     model.fit(train_dataset, validation_data=validation_dataset, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
@@ -214,14 +214,21 @@ for iteration in range(1, 6):
     
     print('----- Generating with seed: "' , sentence , '"')
     with open('out_bible.txt','a') as f:
-        f.write(sentence + '\n\n' + '_'*80)
+        f.write('\n' + '----- Generating with seed: "' + sentence + '\n' + '_'*80)
             
     for diversity in [0.2, 0.5, 1.0, 1.2]:
 
         print()
         print('----- diversity:', diversity)
-
-        for i in range(100):
+        
+        with open('out_bible.txt','a') as f:
+            f.write('\n' + '----- diversity:: "' + str(diversity) + '\n' + '_'*80)
+ 
+        #reinitialize generated foreach diversity 
+        generated = ''
+        generated=sentence
+        
+        for i in range(200):
 
             x=tokenizer.texts_to_sequences(generated) # encode the sentence
             x=pad_sequences(x, padding='post')
@@ -229,9 +236,11 @@ for iteration in range(1, 6):
     
             preds = model.predict(x, verbose=0)[0][0]
 
-            epsilon=1.0e-8
-            preds_ajust=np.sum(preds[:-1])-1.0-epsilon
-            preds[:-1]+=preds_ajust/len(preds[:-1])
+            #make sure sum(npvals[:-1])<=1.0
+            preds_ajust=np.sum(preds[:-1])-1.0
+            if preds_ajust > 0:
+                preds[:-1]-=preds_ajust/len(preds[:-1])
+                print (preds)
             
             next_index = sample(preds, diversity)
             #next_index=np.argmax( preds )
@@ -241,15 +250,12 @@ for iteration in range(1, 6):
 
             generated+=' '
             generated+=next_word
-
-            print (next_word)
-            print (' ')
             
         print()
         
-    print('----- Generated text: "' , generated , '"')
+        print('\n'+'----- Generated text: "' , generated , '"')
     
-    with open('out_bible.txt','a') as f:
-        f.write('----- Generated text: "' + generated + '\n\n' + '_'*80)
+        with open('out_bible.txt','a') as f:
+            f.write('\n'+'----- Generated text: "' + generated + '\n' + '_'*80+'\n' )
   
 #model.save_weights('weights') 
