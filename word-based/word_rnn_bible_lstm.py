@@ -133,7 +133,7 @@ print ( len( list(dataset.as_numpy_iterator()) ) )
 #### Model
 #####
 
-EPOCHS=200
+EPOCHS=30
 BATCH_SIZE=128
 VAL_FRAC=0.2  
 LSTM_UNITS=1024
@@ -191,12 +191,15 @@ def sample(a, temperature=1.0):
     return np.argmax(np.random.multinomial(1, a, 1))
 
 #train the model, output generated text after each iteration
-for iteration in range(1, 300):
+for iteration in range(1, 6):
 
     print()
     print('-' * 50)
     print('Iteration', iteration)
 
+    with open('out_bible.txt','a') as f:
+        f.write('Iteration' + str( iteration ) + '\n\n' + '_'*80)
+        
     model.fit(train_dataset, validation_data=validation_dataset, batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     model.save_weights('GoTweights',overwrite=True)
@@ -210,11 +213,11 @@ for iteration in range(1, 300):
     generated+=sentence
     
     print('----- Generating with seed: "' , sentence , '"')
-
+    with open('out_bible.txt','a') as f:
+        f.write(sentence + '\n\n' + '_'*80)
+            
     for diversity in [0.2, 0.5, 1.0, 1.2]:
 
-        with open('out_bible.txt','a') as f:
-            f.write(str( diversity ) + '\n\n' + '_'*80)
         print()
         print('----- diversity:', diversity)
 
@@ -225,9 +228,13 @@ for iteration in range(1, 300):
             x=np.array(x)
     
             preds = model.predict(x, verbose=0)[0][0]
-         
-            #next_index = sample(preds, diversity)
-            next_index=np.argmax( preds )
+
+            epsilon=1.0e-8
+            preds_ajust=np.sum(preds[:-1])-1.0-epsilon
+            preds[:-1]+=preds_ajust/len(preds[:-1])
+            
+            next_index = sample(preds, diversity)
+            #next_index=np.argmax( preds )
 
             next_word,idx = sorted(word_index.items(), key=operator.itemgetter(1))[next_index]
             #next_word = word_index[next_index]
@@ -243,6 +250,6 @@ for iteration in range(1, 300):
     print('----- Generated text: "' , generated , '"')
     
     with open('out_bible.txt','a') as f:
-        f.write(generated + '\n\n' + '_'*80)
+        f.write('----- Generated text: "' + generated + '\n\n' + '_'*80)
   
 #model.save_weights('weights') 
